@@ -473,10 +473,10 @@ public class CheckoutServiceImpl implements CheckoutService {
 
         PointsAccount pointsAccount = pointsAccountRepository.findById(userId)
                 .orElseGet(() -> {
-            PointsAccount PA = new PointsAccount();
-            PA.setUserId(userId);
-            PA.setBalance(0);
-            return pointsAccountRepository.save(PA);
+            PointsAccount pa = new PointsAccount();
+            pa.setUserId(userId);
+            pa.setBalance(0);
+            return pointsAccountRepository.save(pa);
         });
 
         Integer balance = pointsAccount.getBalance();
