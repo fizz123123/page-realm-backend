@@ -1,0 +1,46 @@
+{
+  "Header": {
+    "RtnCode": "000",
+    "RtnMsg": null,
+    "TimeStamp": "2025-08-15 15:15:15",
+    "RequestID": "F8527B8F-4893-48B3-8BDA-D123412CDBBF",
+    "Token": "GFGDG5DGGGGH458UYI4K13"
+  },
+  "Body": [
+    {
+      "id": "1",
+      "title": "書本一",
+      "image": "./img/1.png",
+      "author": "作者一",
+      "price": 100
+    },
+    {
+      "id": "2",
+      "title": "書本二",
+      "image": "./img/2.png",
+      "author": "作者二",
+      "price": 150
+    },
+    {
+      "id": "3",
+      "title": "書本三",
+      "image": "./img/3.png",
+      "author": "作者三",
+      "price": 200
+    },
+    {
+      "id": "4",
+      "title": "書本四",
+      "image": "./img/4.png",
+      "author": "作者三",
+      "price": 200
+    },
+    {
+      "id": "5",
+      "title": "書本五",
+      "image": "./img/5.png",
+      "author": "作者一",
+      "price": 150
+    }
+  ]
+}

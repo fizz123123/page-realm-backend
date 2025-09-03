@@ -1,0 +1,230 @@
+<!DOCTYPE html>
+
+<html lang="zh-Hant">
+    <head>
+        <meta charset="utf-8">
+        <title>電子書購物車測試</title>
+
+        <style>
+            #menu {
+                display: flex;
+                flex-wrap: wrap;
+                gap: 10px;
+            }
+
+            #product_list {
+                display: flex;
+                flex-wrap: wrap;
+                gap: 10px;
+            }
+        </style>
+
+    </head>
+    <body>
+        <div class="menu">
+            <button onclick="showSection('product_list')">回到首頁</button>
+            <button onclick="showSection('cart_list')">查看購物車</button>
+            <button onclick="showSection('wish_list')">查看願望清單</button>
+            <button id="logout_btn">登出</button>
+        </div>
+
+
+        <div id="product_list" class="section"></div>
+        <div id="login" class="section" style="display:none">
+            <h3>會員登入</h3>
+            <input type="email" id="login_email" placeholder="Email"><br>
+            <input type="password" id="login_password" placeholder="Password"><br>
+            <button id="login_btn">登入</button>
+            <span id="login_status"></span>
+        </div>
+        <div id="cart_list" class="section" style="display:none"></div>
+        <div id="wish_list" class="section" style="display:none"></div>
+        <script>
+            // 區塊切換
+            function showSection(id) {
+                document.querySelectorAll('.section').forEach(sec => {
+                    sec.style.display = 'none';
+                });
+                document.getElementById(id).style.display = 'block';
+            }
+
+            // 登出
+            document.getElementById('logout_btn').onclick = function() {
+                localStorage.removeItem('jwtToken');
+                showSection('product_list');
+            }
+
+            // 判斷是否登入
+            function isLoggedIn() {
+                return !!localStorage.getItem('jwtToken');
+            }
+
+            // 查看購物車按鈕
+            document.querySelector('button[onclick*="cart_list"]').onclick = function() {
+                if (!isLoggedIn()) {
+                    showSection('login');
+                } else {
+                    loadCart();
+                    showSection('cart_list');
+                }
+            };
+            // 查看願望清單按鈕（暫不實作API）
+            document.querySelector('button[onclick*="wish_list"]').onclick = function() {
+                if (!isLoggedIn()) {
+                    showSection('login');
+                } else {
+                    showSection('wish_list');
+                }
+            };
+
+            // 登入
+            document.getElementById('login_btn').onclick = function() {
+                const email = document.getElementById('login_email').value;
+                const password = document.getElementById('login_password').value;
+                fetch('/api/auth/public/signin', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ email, password })
+                })
+                .then(res => res.json())
+                .then(data => {
+                    if (data.jwtToken) {
+                        localStorage.setItem('jwtToken', data.jwtToken);
+                        document.getElementById('login_status').innerText = '登入成功';
+                        setTimeout(() => {
+                            showSection('product_list');
+                            document.getElementById('login_status').innerText = '';
+                        }, 800);
+                    } else {
+                        document.getElementById('login_status').innerText = '登入失敗';
+                    }
+                })
+                .catch(() => document.getElementById('login_status').innerText = '登入失敗');
+            };
+
+            // 商品列表
+            fetch('/api/books')
+                .then(res => res.json())
+                .then(books => {
+                    const list = document.getElementById('product_list');
+                    books.forEach(b => {
+                        const card = document.createElement('div');
+                        card.className = 'product-card';
+                        card.innerHTML = `
+                            <img src="${b.coverImageUrl}" alt="${b.title}" style="width:80px;height:100px;">
+                            <div class="info">
+                                <p>${b.format}</p>
+                                <h3>書名：${b.title}</h3><p>作者：${b.publisherName}</p>
+                                <p>價格$${b.price}</p>
+                                <button class="add-cart" data-id="${b.id}" data-price="${b.price}">加入購物車</button>
+                            </div>`;
+                        list.appendChild(card);
+                    });
+                });
+
+            // 加入購物車
+            document.addEventListener('click', function(e) {
+                if (e.target.classList.contains('add-cart')) {
+                    const bookId = e.target.dataset.id;
+                    const token = localStorage.getItem('jwtToken');
+                    if (token) {
+                        // 會員購物車
+                        fetch('/api/cart/add', {
+                            method: 'POST',
+                            headers: {
+                                'Content-Type': 'application/json',
+                                'Authorization': 'Bearer ' + token
+                            },
+                            body: JSON.stringify({ bookId })
+                        })
+                        .then(res => res.json())
+                        .then(data => alert('加入會員購物車成功: ' + data.bookId))
+                        .catch(() => alert('加入失敗'));
+                    } else {
+                        // 匿名購物車
+                        fetch('/api/cart/public/add?booksId=' + bookId, {
+                            method: 'POST',
+                            credentials: 'include'
+                        })
+                        .then(res => res.json())
+                        .then(data => alert('加入匿名購物車成功: ' + data.booksId))
+                        .catch(() => alert('加入失敗'));
+                    }
+                }
+            });
+
+            // 載入購物車
+            function loadCart() {
+                const token = localStorage.getItem('jwtToken');
+                if (!token) return;
+                fetch('/api/cart/view', {
+                    method: 'GET',
+                    headers: { 'Authorization': 'Bearer ' + token }
+                })
+                .then(res => res.json())
+                .then(data => {
+                    let html = '<h3>購物車內容</h3>';
+                    if (data.items && data.items.length > 0) {
+                        html += '<input type="checkbox" id="select_all"> 全選 <button id="delete_selected">刪除</button><br>';
+                        html += '<ul id="cart_items">';
+                        let total = 0;
+                        data.items.forEach(item => {
+                            total += item.snapshotPrice || 0;
+                            html += `<li><input type="checkbox" class="cart_ck" data-id="${item.id}"> 書名: ${item.title} (ID: ${item.bookId}) 價格: $${item.snapshotPrice} <button class="remove-cart" data-id="${item.id}">移除</button></li>`;
+                        });
+                        html += '</ul>';
+                        html += `<div>合計：$<span id="cart_total">${total}</span></div>`;
+                    } else {
+                        html += '購物車為空';
+                    }
+                    document.getElementById('cart_list').innerHTML = html;
+                })
+                .catch(() => document.getElementById('cart_list').innerText = '取得失敗');
+            }
+
+            // 全選/取消全選
+            document.addEventListener('change', function(e) {
+                if (e.target.id === 'select_all') {
+                    document.querySelectorAll('.cart_ck').forEach(ck => {
+                        ck.checked = e.target.checked;
+                    });
+                }
+            });
+
+            // 刪除選中商品
+            document.addEventListener('click', function(e) {
+                if (e.target.id === 'delete_selected') {
+                    const token = localStorage.getItem('jwtToken');
+                    const checked = Array.from(document.querySelectorAll('.cart_ck:checked')).map(ck => Number(ck.dataset.id));
+                    if (checked.length === 0) return alert('請選擇要刪除的商品');
+                    fetch('/api/cart/remove', {
+                        method: 'DELETE',
+                        headers: {
+                            'Content-Type': 'application/json',
+                            'Authorization': 'Bearer ' + token
+                        },
+                        body: JSON.stringify({ ids: checked })
+                    }).then(() => {
+                        loadCart();
+                    });
+                }
+                // 單一移除
+                if (e.target.classList.contains('remove-cart')) {
+                    const itemId = Number(e.target.dataset.id);
+                    const token = localStorage.getItem('jwtToken');
+                    fetch('/api/cart/remove', {
+                        method: 'DELETE',
+                        headers: {
+                            'Content-Type': 'application/json',
+                            'Authorization': 'Bearer ' + token
+                        },
+                        body: JSON.stringify({ ids: [itemId] })
+                    })
+                    .then(() => loadCart());
+                }
+            });
+        </script>
+
+    </body>
+
+</html>
