@@ -461,9 +461,7 @@ public class CheckoutServiceImpl implements CheckoutService {
             throw new IllegalArgumentException("找不到點數規則");
         }
         int points = CashbackCalculator.calculatePoints(order.getTotalAmount(), nowtier, rule);
-        PointReservations pointReservations = pointReservationsRepository.findByUserIdAndStatus(userId, ReservationStatus.ACTIVE).orElse(null);
-        pointReservations.setStatus(ReservationStatus.COMMITTED);
-        pointReservationsRepository.save(pointReservations);
+
 
         PointLot lotEarned = new PointLot();
         lotEarned.setUserId(userId);
@@ -473,8 +471,14 @@ public class CheckoutServiceImpl implements CheckoutService {
         lotEarned.setExpiresAt(LocalDateTime.now().plusDays(rule.getRollingDays()));
         pointLotRepository.save(lotEarned);
 
-        PointsAccount pointsAccount = pointsAccountRepository.findById(userId).orElse(null);
-        assert pointsAccount != null;
+        PointsAccount pointsAccount = pointsAccountRepository.findById(userId)
+                .orElseGet(() -> {
+            PointsAccount PA = new PointsAccount();
+            PA.setUserId(userId);
+            PA.setBalance(0);
+            return pointsAccountRepository.save(PA);
+        });
+
         Integer balance = pointsAccount.getBalance();
 
         PointsLedger ledgerEarned = new PointsLedger();
@@ -488,11 +492,16 @@ public class CheckoutServiceImpl implements CheckoutService {
         pointsAccount.setBalance(balance + points);
         pointsAccountRepository.save(pointsAccount);
 
-        Integer reservedPts = pointReservations != null ? pointReservations.getReservedPts() : 0;
         Integer couponDeduction = order.getDiscountAmount();
         Integer pointsDeduction = order.getPointsDeductionAmount();
 
         if(couponDeduction>0 && pointsDeduction>0) {
+            PointReservations pointReservations = pointReservationsRepository.findByUserIdAndStatus(userId, ReservationStatus.ACTIVE)
+                    .orElse(null);
+            pointReservations.setStatus(ReservationStatus.COMMITTED);
+            pointReservationsRepository.save(pointReservations);
+            Integer reservedPts = pointReservations != null ? pointReservations.getReservedPts() : 0;
+
             PointLot lotUsed = new PointLot();
             lotUsed.setUserId(userId);
             lotUsed.setSource(PointLot.Source.ORDER);
@@ -520,6 +529,12 @@ public class CheckoutServiceImpl implements CheckoutService {
             return;
         }
         else if(pointsDeduction>0) {
+            PointReservations pointReservations = pointReservationsRepository.findByUserIdAndStatus(userId, ReservationStatus.ACTIVE)
+                    .orElse(null);
+            pointReservations.setStatus(ReservationStatus.COMMITTED);
+            pointReservationsRepository.save(pointReservations);
+            Integer reservedPts = pointReservations != null ? pointReservations.getReservedPts() : 0;
+
             PointLot lotUsed = new PointLot();
             lotUsed.setUserId(userId);
             lotUsed.setSource(PointLot.Source.ORDER);
