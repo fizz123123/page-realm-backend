@@ -104,11 +104,9 @@ public class CheckoutController {
     public String createOrder(@AuthenticationPrincipal UserDetailsImpl userDetails) {
 
         Map<String, String> orderInfo = checkoutService.createOrder(userDetails.getId());
-        //String tradeNo = "T" + UUID.randomUUID().toString().replace("-", "").substring(0, 15);
+
         String tradeNo = orderInfo.get("tradeNo") + UUID.randomUUID().toString().replace("-", "").substring(0, 5);;
-        //Integer amount = 150;
         Integer amount = Integer.valueOf(orderInfo.get("amount"));
-        //String itemName = "商品";
         String itemName = orderInfo.get("itemName");
 
 

@@ -51,7 +51,6 @@ public class EcpayClient {
         params.put("IgnorePayment", "BARCODE#ApplePay#TWQR#BNPL#WeiXin");
         params.put("EncryptType", "1");
 
-        System.out.println(params);
         String checkMac = CheckMacValueUtil.generate(params, hashKey, hashIv);
         params.put("CheckMacValue", checkMac);
         return params;

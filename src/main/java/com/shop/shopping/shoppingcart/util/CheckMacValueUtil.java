@@ -12,16 +12,12 @@ public class CheckMacValueUtil {
         Map<String, String> filtered = params.entrySet().stream()
                 .filter(e -> e.getKey() != null && e.getValue() != null && !"CheckMacValue".equalsIgnoreCase(e.getKey()))
                 .collect(Collectors.toMap(Map.Entry::getKey, Map.Entry::getValue));
-        System.out.println(filtered);
         List<String> keys = new ArrayList<>(filtered.keySet());
         Collections.sort(keys, String.CASE_INSENSITIVE_ORDER);
-        System.out.println(keys);
         String query = keys.stream()
                 .map(k -> k + "=" + filtered.get(k))
                 .collect(Collectors.joining("&"));
-        System.out.println(query);
         String raw = "HashKey=" + hashKey + "&" + query + "&HashIV=" + hashIv;
-        System.out.println(raw);
         String encoded = urlEncodeForEcpay(raw).toLowerCase(Locale.ROOT);
 
         return sha256Hex(encoded).toUpperCase(Locale.ROOT);
