@@ -42,7 +42,7 @@ public class Orders {
     @Enumerated(EnumType.STRING)
     private OrderStatus status;
 
-    @Column(name = "payment_type", nullable = false)
+    @Column(name = "payment_type")
     private String paymentType;
 
     @Column(name="created_at", nullable = false, updatable = false)

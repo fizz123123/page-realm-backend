@@ -133,8 +133,11 @@ public class CouponService {
         if (!vr.isValid()) {
             throw new IllegalArgumentException("不可用: " + vr.getReason());
         }
+        Coupon c = couponRepository.findById(vr.getCouponId())
+                .orElseThrow(() -> new EntityNotFoundException("coupon 不存在"));
+
         CouponRedemption red = CouponRedemption.builder()
-                .couponId(vr.getCouponId())
+                .coupon(c)
                 .userId(req.getUserId())
                 .orderId(req.getOrderId())
                 .orderItemId(req.getOrderItemId())
@@ -150,7 +153,7 @@ public class CouponService {
         }
         return CouponDtos.RedemptionResponse.builder()
                 .redemptionId(red.getId())
-                .couponId(red.getCouponId())
+                .couponId(red.getCoupon().getId())
                 .userId(red.getUserId())
                 .orderId(red.getOrderId())
                 .amountDiscounted(red.getAmountDiscounted())
@@ -168,7 +171,7 @@ public class CouponService {
         red = redemptionRepository.save(red);
         return CouponDtos.RedemptionResponse.builder()
                 .redemptionId(red.getId())
-                .couponId(red.getCouponId())
+                .couponId(red.getCoupon().getId())
                 .userId(red.getUserId())
                 .orderId(red.getOrderId())
                 .amountDiscounted(red.getAmountDiscounted())
@@ -181,7 +184,7 @@ public class CouponService {
         return redemptionRepository.findAllByUserIdOrderByRedeemedAtDesc(userId, pageable)
                 .map(r -> CouponDtos.RedemptionResponse.builder()
                         .redemptionId(r.getId())
-                        .couponId(r.getCouponId())
+                        .couponId(r.getCoupon().getId())
                         .userId(r.getUserId())
                         .orderId(r.getOrderId())
                         .amountDiscounted(r.getAmountDiscounted())

@@ -1,6 +1,7 @@
 package com.pagerealm.shoppingcart.controller;
 
 import com.pagerealm.authentication.security.service.UserDetailsImpl;
+import com.pagerealm.coupons_points.repository.CouponRedemptionRepository;
 import com.pagerealm.shoppingcart.dto.request.ApplyCouponRequest;
 import com.pagerealm.shoppingcart.dto.request.ApplyPointsRequest;
 import com.pagerealm.shoppingcart.dto.response.*;
@@ -8,6 +9,7 @@ import com.pagerealm.shoppingcart.service.CheckoutService;
 import com.pagerealm.shoppingcart.util.CheckMacValueUtil;
 import com.pagerealm.shoppingcart.util.payment.EcpayClient;
 import org.springframework.beans.factory.annotation.Value;
+import org.springframework.http.HttpStatus;
 import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
@@ -16,17 +18,19 @@ import org.springframework.web.bind.annotation.*;
 
 import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
+import java.util.List;
 import java.util.Map;
 import java.util.UUID;
 
 @RestController
 @RequestMapping("/api/checkout")
 public class CheckoutController {
-
     private final CheckoutService checkoutService;
     private final EcpayClient ecpayClient;
+    private final CouponRedemptionRepository couponRedemptionRepository;
 
-    public CheckoutController(EcpayClient ecpayClient, CheckoutService checkoutService) {
+    public CheckoutController(EcpayClient ecpayClient, CheckoutService checkoutService, CouponRedemptionRepository couponRedemptionRepository) {
+        this.couponRedemptionRepository = couponRedemptionRepository;
         this.ecpayClient = ecpayClient;
         this.checkoutService = checkoutService;
     }
@@ -44,8 +48,13 @@ public class CheckoutController {
      */
     @GetMapping("/summary")
     public ResponseEntity<CartSummaryResponse> getCartSummary(@AuthenticationPrincipal UserDetailsImpl userDetails) {
-        CartSummaryResponse response = checkoutService.getCartSummary(userDetails.getId());
-        return ResponseEntity.ok(response);
+        try {
+            CartSummaryResponse response = checkoutService.getCartSummary(userDetails.getId());
+            return ResponseEntity.ok(response);
+        } catch (IllegalArgumentException e) {
+            // 這裡不用 401，避免前端登出
+            return ResponseEntity.status(HttpStatus.CONFLICT).body(null);
+        }
     }
 
     /**
@@ -55,8 +64,12 @@ public class CheckoutController {
      */
     @GetMapping("/membershipTier")
     public ResponseEntity<MembershipTierResponse> getMembershipTierInfo(@AuthenticationPrincipal UserDetailsImpl userDetails) {
-        MembershipTierResponse response = checkoutService.getMembershipTierInfo(userDetails.getId());
-        return ResponseEntity.ok(response);
+        try {
+            MembershipTierResponse response = checkoutService.getMembershipTierInfo(userDetails.getId());
+            return ResponseEntity.ok(response);
+        } catch (IllegalArgumentException e) {
+            return ResponseEntity.status(HttpStatus.CONFLICT).body(null);
+        }
     }
 
     /**
@@ -66,8 +79,12 @@ public class CheckoutController {
      */
     @GetMapping("/pointsInfo")
     public ResponseEntity<PointsInfoResponse> getAvailablePoints(@AuthenticationPrincipal UserDetailsImpl userDetails) {
-        PointsInfoResponse response = checkoutService.getAvailablePoints(userDetails.getId());
-        return ResponseEntity.ok(response);
+        try {
+            PointsInfoResponse response = checkoutService.getAvailablePoints(userDetails.getId());
+            return ResponseEntity.ok(response);
+        } catch (IllegalArgumentException e) {
+            return ResponseEntity.status(HttpStatus.CONFLICT).body(null);
+        }
     }
 
     /**
@@ -79,9 +96,30 @@ public class CheckoutController {
     @PostMapping("/applyPoints")
     public ResponseEntity<PointsDeductionResponse> applyPoints(@AuthenticationPrincipal UserDetailsImpl userDetails,
                                                                @RequestBody ApplyPointsRequest request) {
-        PointsDeductionResponse response = checkoutService.applyPoints(userDetails.getId(), request);
-        return ResponseEntity.ok(response);
+        try {
+            PointsDeductionResponse response = checkoutService.applyPoints(userDetails.getId(), request);
+            return ResponseEntity.ok(response);
+        } catch (IllegalArgumentException e) {
+            return ResponseEntity.status(HttpStatus.CONFLICT).body(null);
+        }
     }
+
+    /**
+     * 顯示可用優惠劵
+     */
+    @GetMapping("/couponInfo")
+    public ResponseEntity<List<CouponInfoResponse>> getAvailableCoupons(@AuthenticationPrincipal UserDetailsImpl userDetails) {
+        Long userId = userDetails.getId();
+
+        List<CouponInfoResponse> coupons = couponRedemptionRepository.findValidCouponByUserId(userId);
+
+        if (coupons.isEmpty()) {
+            return ResponseEntity.noContent().build(); // 204
+        } else {
+            return ResponseEntity.ok(coupons); // 200 + list json
+        }
+    }
+
 
     /**
      * 使用優惠劵
@@ -92,8 +130,12 @@ public class CheckoutController {
     @PostMapping("/applyCoupon")
     public ResponseEntity<CouponDeductionResponse> applyCoupon(@AuthenticationPrincipal UserDetailsImpl userDetails,
                                                                @RequestBody ApplyCouponRequest request) {
-        CouponDeductionResponse response = checkoutService.applyCoupon(userDetails.getId(), request);
-        return ResponseEntity.ok(response);
+        try {
+            CouponDeductionResponse response = checkoutService.applyCoupon(userDetails.getId(), request);
+            return ResponseEntity.ok(response);
+        } catch (IllegalArgumentException e) {
+            return ResponseEntity.status(HttpStatus.CONFLICT).body(null);
+        }
     }
 
     /**

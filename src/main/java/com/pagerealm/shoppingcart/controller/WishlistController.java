@@ -11,6 +11,7 @@ import com.pagerealm.shoppingcart.repository.AnonWishlistRedisRepository;
 import com.pagerealm.shoppingcart.service.WishlistService;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
+import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.web.bind.annotation.*;
@@ -75,8 +76,12 @@ public class WishlistController {
         if (userDetails == null) {
             return ResponseEntity.status(401).body("未登入");
         }
-        WishResponse response = wishlistService.getWish(userDetails.getId());
-        return ResponseEntity.ok(response);
+        try {
+            WishResponse response = wishlistService.getWish(userDetails.getId());
+            return ResponseEntity.ok(response);
+        } catch (IllegalArgumentException e) {
+            return ResponseEntity.status(HttpStatus.CONFLICT).body(e.getMessage());
+        }
     }
 
     /**

@@ -17,7 +17,7 @@ public class PointReservations {
     @Column(name = "user_id", nullable = false)
     private Long userId;
 
-    @Column(name = "order_id", nullable = false)
+    @Column(name = "order_id")
     private Long orderId;
 
     @Column(name = "reserved_pts", nullable = false)

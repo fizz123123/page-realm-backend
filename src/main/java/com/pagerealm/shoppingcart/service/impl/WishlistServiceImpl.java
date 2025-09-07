@@ -10,6 +10,7 @@ import com.pagerealm.shoppingcart.dto.response.WishResponse;
 import com.pagerealm.shoppingcart.entity.*;
 import com.pagerealm.shoppingcart.repository.AnonWishlistRedisRepository;
 import com.pagerealm.shoppingcart.repository.CartRepository;
+import com.pagerealm.shoppingcart.repository.WishlistItemRepository;
 import com.pagerealm.shoppingcart.repository.WishlistRepository;
 import com.pagerealm.shoppingcart.service.WishlistService;
 import org.springframework.stereotype.Service;
@@ -23,15 +24,17 @@ public class WishlistServiceImpl implements WishlistService {
     private final CartRepository cartRepository;
     private final AnonWishlistRedisRepository anonWishlistRedisRepository;
     private final BookRepository booksRepository;
+    private final WishlistItemRepository wishlistItemRepository;
 
     public WishlistServiceImpl(WishlistRepository wishlistRepository,
-                                CartRepository cartRepository,
-                           AnonWishlistRedisRepository anonWishlistRedisRepository,
-                           BookRepository booksRepository) {
+                               CartRepository cartRepository,
+                               AnonWishlistRedisRepository anonWishlistRedisRepository,
+                               BookRepository booksRepository, WishlistItemRepository wishlistItemRepository) {
         this.wishlistRepository = wishlistRepository;
         this.cartRepository = cartRepository;
         this.anonWishlistRedisRepository = anonWishlistRedisRepository;
         this.booksRepository = booksRepository;
+        this.wishlistItemRepository = wishlistItemRepository;
     }
 
     @Override
@@ -107,10 +110,11 @@ public class WishlistServiceImpl implements WishlistService {
         response.setWishId(wishlist.getId());
         response.setUserId(wishlist.getUserId());
         List<WishItemResponse> itemResponses = new ArrayList<>();
-        for (WishlistItems item : wishlist.getItems()) {
+        for (int i = 0; i < wishlist.getItems().size(); i++) {
+            WishlistItems item = wishlist.getItems().get(i);
             Book book = item.getBook();
             WishItemResponse itemResp = new  WishItemResponse();
-            itemResp.setBookId(book.getId());
+            itemResp.setId(item.getId());
             itemResp.setTitle(book.getTitle());
             itemResp.setAuthor(book.getAuthor());
             itemResp.setPrice(book.getListPrice());

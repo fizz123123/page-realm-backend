@@ -14,8 +14,10 @@ public class CashbackCalculator {
         BigDecimal tierRate = tier.cashbackRate();
         // point_rules 回饋比率 basis points (基點) ，所以是100 ÷ 10000 = 0.01 = 1%
         BigDecimal ruleRate = BigDecimal.valueOf(rule.getRewardRateBp()).divide(BigDecimal.valueOf(10000));
+        // 取較大者作為回饋率
+        BigDecimal appliedRate = tierRate.compareTo(ruleRate) > 0 ? tierRate : ruleRate;
         // 計算
-        BigDecimal points = BigDecimal.valueOf(amount).multiply(tierRate.add(ruleRate));
+        BigDecimal points = BigDecimal.valueOf(amount).multiply(appliedRate);
         // 無條件捨去小數點 ROUND_DOWN
         int result = points.setScale(0, RoundingMode.DOWN).intValue();
         if (rule.getMaxRewardPoints() != null && result > rule.getMaxRewardPoints()) {

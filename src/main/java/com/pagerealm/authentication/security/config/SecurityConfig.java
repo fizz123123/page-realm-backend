@@ -57,7 +57,7 @@ public class SecurityConfig {
                 .authorizeHttpRequests(request -> request
                         .requestMatchers("/api/admin/**").hasRole("ADMIN")
                         //.requestMatchers("/api/csrf-token").permitAll()
-                        .requestMatchers("/api/auth/public/**","api/checkout/notify").permitAll()
+                        .requestMatchers("/api/auth/public/**","api/checkout/notify","api/cart/public/**","api/wish/public/**").permitAll()
                         .requestMatchers("/images/**").permitAll()
                         .requestMatchers("/oauth2/**").permitAll()
                         // 優惠券：分級控制

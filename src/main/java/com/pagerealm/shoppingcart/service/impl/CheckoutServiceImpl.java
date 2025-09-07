@@ -323,7 +323,7 @@ public class CheckoutServiceImpl implements CheckoutService {
             if (couponRedemption == null) {
                 throw new IllegalArgumentException("找不到優惠券使用紀錄");
             }
-            couponRedemption.setCouponId(coupon.getId());
+            couponRedemption.setCoupon(coupon);
             couponRedemption.setAmountDiscounted(discount);
             couponRedemptionRepository.save(couponRedemption);
             resp.setDeductionAmount(discount);
@@ -333,7 +333,7 @@ public class CheckoutServiceImpl implements CheckoutService {
         }
 
         CouponRedemption redemption = new CouponRedemption();
-        redemption.setCouponId(coupon.getId());
+        redemption.setCoupon(coupon);
         redemption.setUserId(userId);
         redemption.setStatus(CouponRedemption.RedemptionStatus.APPLIED);
         redemption.setAmountDiscounted(discount);
@@ -473,11 +473,11 @@ public class CheckoutServiceImpl implements CheckoutService {
 
         PointsAccount pointsAccount = pointsAccountRepository.findById(userId)
                 .orElseGet(() -> {
-            PointsAccount pa = new PointsAccount();
-            pa.setUserId(userId);
-            pa.setBalance(0);
-            return pointsAccountRepository.save(pa);
-        });
+                    PointsAccount pa = new PointsAccount();
+                    pa.setUserId(userId);
+                    pa.setBalance(0);
+                    return pointsAccountRepository.save(pa);
+                });
 
         Integer balance = pointsAccount.getBalance();
 

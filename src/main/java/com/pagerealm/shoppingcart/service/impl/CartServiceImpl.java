@@ -28,7 +28,7 @@ public class CartServiceImpl implements CartService {
      * 使用建構子注入可以讓依賴關係更加明確，並且更容易進行單元測試。
      */
     public CartServiceImpl(WishlistRepository wishlistRepository,
-                            CartRepository cartRepository,
+                           CartRepository cartRepository,
                            CartItemRepository cartItemRepository,
                            AnonCartRedisRepository anonCartRedisRepository,
                            BookRepository booksRepository) {
@@ -130,10 +130,11 @@ public class CartServiceImpl implements CartService {
         response.setCartId(cart.getId());
         response.setUserId(cart.getUserId());
         List<CartItemResponse> itemResponses = new ArrayList<>();
-        for (CartItem item : cart.getItems()) {
+        for (int i = 0; i < cart.getItems().size(); i++) {
+            CartItem item = cart.getItems().get(i);
             Book book = item.getBook();
             CartItemResponse itemResp = new CartItemResponse();
-            itemResp.setBookId(book.getId());
+            itemResp.setId(item.getId());
             itemResp.setTitle(book.getTitle());
             itemResp.setAuthor(book.getAuthor());
             itemResp.setSnapshotPrice(item.getSnapshotPrice());

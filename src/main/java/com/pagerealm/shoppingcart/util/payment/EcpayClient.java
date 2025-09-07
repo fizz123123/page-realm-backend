@@ -26,10 +26,10 @@ public class EcpayClient {
 
     @Value("${ecpay.return-url}")
     private String returnURL;
-    /*
+
     @Value("${ecpay.client-back-url}")
     private String clientBackURL;
-    */
+
 
     private static final DateTimeFormatter TRADE_DATE_FMT = DateTimeFormatter.ofPattern("yyyy/MM/dd HH:mm:ss");
 
@@ -50,6 +50,7 @@ public class EcpayClient {
         params.put("ChoosePayment", "ALL");
         params.put("IgnorePayment", "BARCODE#ApplePay#TWQR#BNPL#WeiXin");
         params.put("EncryptType", "1");
+        params.put("ClientBackURL",clientBackURL);
 
         String checkMac = CheckMacValueUtil.generate(params, hashKey, hashIv);
         params.put("CheckMacValue", checkMac);

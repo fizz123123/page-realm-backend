@@ -10,6 +10,9 @@ import java.util.List;
 
 public interface PointLotRepository extends JpaRepository<PointLot, Long> {
     List<PointLot> findByUserIdOrderByExpiresAtAscIdAsc(Long userId);
+
+    List<PointLot> findByUserIdOrderByCreatedAtDesc(Long userId);
+
     Page<PointLot> findAllByUserIdOrderByExpiresAtAscIdAsc(Long userId, Pageable pageable);
     List<PointLot> findByUserIdAndExpiresAtLessThanEqual(Long userId, LocalDateTime cutoff);
     List<PointLot> findByExpiresAtLessThanEqual(LocalDateTime cutoff);
