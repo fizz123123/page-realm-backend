@@ -23,7 +23,7 @@ public interface CouponRedemptionRepository extends JpaRepository<CouponRedempti
     boolean existsByOrderIdAndCouponId(Long orderId, Long couponId);
     Page<CouponRedemption> findAllByUserIdOrderByRedeemedAtDesc(Long userId, Pageable pageable);
 
-    @Query("SELECT new com.pagerealm.shoppingcart.dto.response.CouponInfoResponse( c.name, c.discountType, c.discountValue)"+
+    @Query("SELECT new com.pagerealm.shoppingcart.dto.response.CouponInfoResponse( c.name, c.discountType, c.discountValue,c.genericCode)"+
             "FROM CouponRedemption cr " +
             "JOIN cr.coupon c " +
             "WHERE cr.userId = :userId AND cr.status = 'HOLD' ")

@@ -10,14 +10,18 @@ public class CouponInfoResponse {
     private String name;
     private String discountType;
     private Integer discountValue;
+    private String code;
 
     public CouponInfoResponse(String name,
                               Coupon.DiscountType discountType,
-                              Integer discountValue) {
+                              Integer discountValue,
+                              String code
+    ) {
 
         this.name = name;
         this.discountType = discountType.toString();
         this.discountValue = discountValue;
+        this .code = code;
     }
 }
 

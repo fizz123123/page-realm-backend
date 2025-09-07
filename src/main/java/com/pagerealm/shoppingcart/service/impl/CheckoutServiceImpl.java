@@ -332,6 +332,21 @@ public class CheckoutServiceImpl implements CheckoutService {
             return resp;
         }
 
+        if (couponRedemptionRepository.findByUserIdAndStatus(userId, CouponRedemption.RedemptionStatus.HOLD).isPresent()) {
+            CouponRedemption couponRedemption = couponRedemptionRepository.findByUserIdAndStatus(userId, CouponRedemption.RedemptionStatus.HOLD).orElse(null);
+            if (couponRedemption == null) {
+                throw new IllegalArgumentException("找不到優惠券使用紀錄");
+            }
+            couponRedemption.setCoupon(coupon);
+            couponRedemption.setAmountDiscounted(discount);
+            couponRedemption.setStatus(CouponRedemption.RedemptionStatus.APPLIED);
+            couponRedemptionRepository.save(couponRedemption);
+            resp.setDeductionAmount(discount);
+            resp.setResult(true);
+            resp.setMessage("優惠券使用成功");
+            return resp;
+        }
+
         CouponRedemption redemption = new CouponRedemption();
         redemption.setCoupon(coupon);
         redemption.setUserId(userId);
