@@ -1,4 +1,4 @@
-package com.pagerealm.admin_log.config;
+package com.pagerealm.admin_log.frontconfig;
 
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;

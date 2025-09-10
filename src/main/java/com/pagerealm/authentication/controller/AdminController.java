@@ -12,6 +12,7 @@ import com.pagerealm.authentication.repository.UserRepository;
 import com.pagerealm.authentication.service.UserService;
 import jakarta.validation.Valid;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.prepost.PreAuthorize;
@@ -20,6 +21,9 @@ import org.springframework.web.bind.annotation.*;
 
 import java.util.List;
 import java.util.Set;
+
+import com.pagerealm.authentication.s3.S3Service;
+import com.pagerealm.authentication.s3.S3Buckets;
 
 @RestController
 @RequestMapping("/api/admin")
@@ -33,6 +37,14 @@ public class AdminController {
     PasswordEncoder passwordEncoder;
     @Autowired
     RoleRepository roleRepository;
+
+    // 新增 S3 相關依賴與預設頭像 key
+    @Autowired
+    S3Service s3Service;
+    @Autowired
+    S3Buckets s3Buckets;
+    @Value("${aws.s3.default-avatar-key}")
+    String defaultAvatarKey;
 
     public AdminController(UserService userService) {
         this.userService = userService;
@@ -90,7 +102,9 @@ public class AdminController {
         user.setMembershipTier(MembershipTier.LV1);
         user.setTotpEnabled(false);
         user.setSignedMethod("Admin");
-        user.setAvatarUrl("/images/Avatar_default.png");
+        // 統一使用 S3 預設頭像 URL
+        String defaultAvatarUrl = s3Service.buildPublicUrl(s3Buckets.getUser(), defaultAvatarKey);
+        user.setAvatarUrl(defaultAvatarUrl);
         user.setVerificationCode(null);
         user.setVerificationCodeExpiresAt(null);
 

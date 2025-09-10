@@ -248,7 +248,7 @@ table.tbl-logs { table-layout: fixed; }
 /* 書籍管理：「編輯 / 刪除」按鈕微幅下移，視覺更置中 */
 #books table td.inline {
     position: relative;
-    top: 40px;
+    top: 0;
 }
 
 /* 全站表單輸入背景改為白色 */

@@ -37,6 +37,11 @@ public class CouponAdminController {
         return couponService.listByStatus(status, pageable);
     }
 
+    @GetMapping("/{id}")
+    public CouponDtos.CouponResponse getOne(@PathVariable Long id) {
+        return couponService.getById(id);
+    }
+
     @PatchMapping("/{id}/status")
     public CouponDtos.CouponResponse changeStatus(@PathVariable Long id, @RequestParam("status") Coupon.CouponStatus status) {
         return couponService.changeStatus(id, status);

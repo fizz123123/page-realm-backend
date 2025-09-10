@@ -13,6 +13,8 @@ API = {
     points: '/api/points',
     pointsRule: '/api/points/rules',
     supportAdmin: '/api/admin/support',
+    // 新增：訂單管理後台 API
+    ordersAdmin: '/api/admin/orders',
 };
 
 // 新增：從 config.js 或 localStorage 取得 API Base URL
@@ -31,6 +33,33 @@ function withBase(url) {
 function authHeader() {
     const token = localStorage.getItem('jwt');
     return token ? {'Authorization': `Bearer ${token}`} : {};
+}
+
+// 新增：將空字串轉為 null，數字字串轉為整數，否則回傳 null
+function valOrNull(v) {
+    if (v === undefined || v === null) return null;
+    const s = String(v).trim();
+    if (!s) return null;
+    const n = Number(s);
+    if (Number.isNaN(n)) return null;
+    // 對於整數欄位取整
+    return Math.trunc(n);
+}
+
+// 新增：補上秒數，確保格式為 YYYY-MM-DDTHH:MM:SS（不含時區）
+function ensureSeconds(s) {
+    if (!s) return '';
+    const t = String(s).trim();
+    // HTML datetime-local 輸出常為 16 長度（YYYY-MM-DDTHH:MM）
+    if (/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}$/.test(t)) return t + ':00';
+    return t;
+}
+
+// 新增：從 input[type=datetime-local] 讀值，轉為 LocalDateTime 字串（不帶 Z）
+function fromInputDateTime(inputId) {
+    const el = document.getElementById(inputId);
+    if (!el) return '';
+    return ensureSeconds(el.value);
 }
 
 // 改善：統一錯誤處理，保留 HTTP 狀態碼並嘗試提取後端的 message
@@ -84,6 +113,16 @@ function formatTWD(n) {
     return 'NT$' + (Number(n) || 0).toLocaleString('zh-Hant-TW');
 }
 
+// 新增：訂單狀態中文映射
+const ORDER_STATUS_I18N = {
+    FULFILLED: '已完成',
+    PAID: '已付款',
+    PAYING: '付款中',
+    CREATED: '已建立',
+    FAILED: '失敗'
+};
+function statusToZh(s) { return ORDER_STATUS_I18N[(s || '').toUpperCase()] || s; }
+
 // 新增：HTML 轉義（避免長字串/特殊符號破版或注入）
 function escHtml(s) {
     if (s === undefined || s === null) return '';
@@ -93,6 +132,41 @@ function escHtml(s) {
         .replaceAll('>', '&gt;')
         .replaceAll('"', '&quot;')
         .replaceAll("'", '&#39;');
+}
+
+// 新增：時間格式化（只顯示到秒，去除 T 與毫秒/時區）
+function formatDateTime(s) {
+    if (!s) return '';
+    try {
+        if (s instanceof Date) {
+            const d = s;
+            const pad = n => String(n).padStart(2, '0');
+            return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())} ${pad(d.getHours())}:${pad(d.getMinutes())}:${pad(d.getSeconds())}`;
+        }
+        const str = String(s);
+        const tzPos = Math.max(str.indexOf('Z'), str.indexOf('+'));
+        let t = tzPos > -1 ? str.slice(0, tzPos) : str; // 去掉時區尾碼
+        t = t.split('.')[0]; // 去掉毫秒
+        t = t.replace('T', ' '); // T -> 空白
+        if (/^\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}$/.test(t)) return t;
+        const d = new Date(str);
+        if (!isNaN(d.getTime())) {
+            const pad = n => String(n).padStart(2, '0');
+            return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())} ${pad(d.getHours())}:${pad(d.getMinutes())}:${pad(d.getSeconds())}`;
+        }
+        return t;
+    } catch {
+        return String(s).replace('T', ' ').split('.')[0];
+    }
+}
+
+// 新增：將 ISO/日期 轉為 input[type=datetime-local] 需要的格式 YYYY-MM-DDTHH:MM
+function toLocal(iso) {
+    if (!iso) return '';
+    const d = new Date(iso);
+    if (isNaN(d.getTime())) return '';
+    const pad = n => String(n).padStart(2, '0');
+    return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
 }
 
 function generateSalesTrend(days) {
@@ -151,16 +225,16 @@ async function renderHome() {
   <div class="grid cols-2" style="margin-top:16px">  
     <div class="grid" style="gap:16px">  
       <div class="card">  
-        <div class="muted" style="margin-bottom:6px">銷售趨勢（最近 30 天）</div>  
+        <div class="muted" style="margin-bottom:6px">銷售趨勢 (最近 30 天）</div>  
         <canvas id="salesTrendChart" height="140"></canvas>  
       </div>  
       <div class="card">  
-        <div class="muted" style="margin-bottom:6px">熱門書籍銷量 Top 5（示意）</div>  
+        <div class="muted" style="margin-bottom:6px">熱門書籍銷量 Top 5</div>  
         <canvas id="topBooksChart" height="140"></canvas>  
       </div>  
     </div>  
     <div class="card">  
-      <div class="muted" style="margin-bottom:6px">訂單狀態分佈（示意）</div>  
+      <div class="muted" style="margin-bottom:6px">訂單狀態分佈</div>  
       <canvas id="orderStatusChart" height="140"></canvas>  
     </div>  
   </div>`;
@@ -174,12 +248,26 @@ async function renderHome() {
         document.getElementById('stat-books').innerHTML = `<div class="muted">書籍數</div><div style="font-size:24px;font-weight:700">${books.totalElements || 0}</div>`;
         document.getElementById('stat-coupons').innerHTML = `<div class="muted">優惠券</div><div style="font-size:24px;font-weight:700">${couponsPage.totalElements || 0}</div>`;
 
-        // 示意資料（可改為真實訂單 API）
-        const trend = generateSalesTrend(30);
-        const orderDist = generateOrderDistribution();
-        const topBooks = generateTopBooks();
+        // 從後端取得真實資料（失敗時退回示意）
+        let trend, topBooks, orderDist;
+        try {
+            trend = await apiGet(API.ordersAdmin + '/sales-trend?days=30');
+        } catch (_) {
+            trend = generateSalesTrend(30);
+        }
+        try {
+            topBooks = await apiGet(API.ordersAdmin + '/top-books?days=30&limit=5');
+        } catch (_) {
+            topBooks = generateTopBooks();
+        }
+        try {
+            const stats = await apiGet(API.ordersAdmin + '/stats');
+            orderDist = { labels: stats.labels || [], values: stats.values || [] };
+        } catch (_) {
+            orderDist = generateOrderDistribution();
+        }
 
-        // 折線圖：銷售趨勢
+        // 折線圖：銷售趨勢（真實資料或示意）
         const ctx1 = document.getElementById('salesTrendChart').getContext('2d');
         const grad = ctx1.createLinearGradient(0, 0, 0, 180);
         grad.addColorStop(0, 'rgba(31,111,235,0.35)');
@@ -212,13 +300,13 @@ async function renderHome() {
             }
         });
 
-        // 甜甜圈圖：訂單狀態分佈
+        // 甜甜圈圖：訂單狀態分佈（真實資料）
         const ctx2 = document.getElementById('orderStatusChart').getContext('2d');
         if (homeCharts.donut) homeCharts.donut.destroy();
         homeCharts.donut = new Chart(ctx2, {
             type: 'doughnut',
             data: {
-                labels: orderDist.labels,
+                labels: (orderDist.labels || []).map(statusToZh),
                 datasets: [{
                     data: orderDist.values,
                     backgroundColor: ['#238636', '#1f6feb', '#d29922', '#7d8590', '#b42318']
@@ -227,7 +315,7 @@ async function renderHome() {
             options: {cutout: '60%', plugins: {legend: {position: 'bottom'}}}
         });
 
-        // 橫向長條：熱門書籍 Top5
+        // 橫向長條：熱門書籍 Top5（真實資料或示意）
         const ctx3 = document.getElementById('topBooksChart').getContext('2d');
         if (homeCharts.topBooks) homeCharts.topBooks.destroy();
         homeCharts.topBooks = new Chart(ctx3, {
@@ -263,8 +351,13 @@ async function renderUsers() {
         <thead><tr>  
           <th>ID</th><th>電子郵件</th><th>使用者名稱</th><th>角色</th><th>啟用狀態</th><th>會員等級</th><th>操作</th>  
         </tr></thead>  
-        <tbody id="usersTbody"></tbody>  
+        <tbody id="usersTbody"><tr><td colspan="7" class="muted">載入中…</td></tr></tbody>  
       </table>  
+      <div class="inline" style="margin-top:8px">  
+        <button class="btn small" id="u_prev" disabled>上一頁</button>  
+        <span id="u_page" class="muted"></span>  
+        <button class="btn small" id="u_next" disabled>下一頁</button>  
+      </div>  
     </div>  
     <div id="userModal" class="card" style="display:none; margin-top:12px">  
       <h3 style="margin-top:0">新增使用者</h3>  
@@ -297,22 +390,68 @@ async function renderUsers() {
         birth.required = true;
     }
     ['u_email','u_username','u_password','u_gender'].forEach(id => { const el = document.getElementById(id); if (el) el.required = true; });
+
+    // 綁定分頁按鈕
+    const up = document.getElementById('u_prev'); if (up) up.onclick = () => changeUsersPage(-1);
+    const un = document.getElementById('u_next'); if (un) un.onclick = () => changeUsersPage(1);
+
     try {
         const list = await apiGet(API.users);
+        usersAll = Array.isArray(list) ? list : [];
+        renderUsersPage(0);
+    } catch (e) {
         const tbody = document.getElementById('usersTbody');
-        tbody.innerHTML = list.map(u => `<tr>  
+        if (tbody) tbody.innerHTML = `<tr><td colspan="7" class="muted">載入使用者失敗：${escHtml(e.message || 'error')}</td></tr>`;
+    }
+}
+
+// 使用者管理：前端分頁狀態與渲染
+let usersAll = [];
+let usersPage = { number: 0, totalPages: 0, size: 20 };
+
+function renderUsersPage(page) {
+    const size = usersPage.size || 20;
+    const total = usersAll.length;
+    const totalPages = Math.max(Math.ceil(total / size), 1);
+    const p = Math.max(0, Math.min(Number(page || 0), totalPages - 1));
+    const start = p * size;
+    const rows = usersAll.slice(start, start + size);
+    const tbody = document.getElementById('usersTbody');
+    if (!tbody) return;
+    if (!rows.length) {
+        tbody.innerHTML = `<tr><td colspan="7" class="muted">查無資料</td></tr>`;
+    } else {
+        tbody.innerHTML = rows.map(u => `<tr>  
       <td>${u.userId}</td>  
-      <td>${u.email}</td>  
-      <td>${u.userName || ''}</td>  
-      <td>${(u.role && (u.role.roleName || u.roleName)) || ''}</td>  
+      <td>${escHtml(u.email)}</td>  
+      <td>${escHtml(u.userName || '')}</td>  
+      <td>${escHtml((u.role && (u.role.roleName || u.roleName)) || '')}</td>  
       <td>${u.enabled ? '是' : '否'}</td>  
-      <td>${u.membershipTier || ''}</td>  
+      <td>${escHtml(u.membershipTier || '')}</td>  
       <td class="inline">  
         <button class="btn small" onclick="toggleEnable(${u.userId}, ${!u.enabled})">${u.enabled ? '停用' : '啟用'}</button>  
       </td>  
     </tr>`).join('');
+    }
+    usersPage = { number: p, totalPages, size };
+    const txt = document.getElementById('u_page'); if (txt) txt.textContent = `第 ${p + 1} / ${totalPages} 頁`;
+    const up = document.getElementById('u_prev'); if (up) up.disabled = p <= 0;
+    const un = document.getElementById('u_next'); if (un) un.disabled = p >= totalPages - 1;
+}
+
+function changeUsersPage(delta) {
+    renderUsersPage((usersPage.number || 0) + delta);
+}
+
+async function refreshUsersAndStay() {
+    try {
+        const current = usersPage.number || 0;
+        const list = await apiGet(API.users);
+        usersAll = Array.isArray(list) ? list : [];
+        const maxPage = Math.max(Math.ceil((usersAll.length || 0) / (usersPage.size || 20)) - 1, 0);
+        renderUsersPage(Math.max(0, Math.min(current, maxPage)));
     } catch (e) {
-        root.innerHTML += `<div class="muted">載入使用者失敗：${e.message}</div>`;
+        // 靜默失敗
     }
 }
 
@@ -371,7 +510,7 @@ async function submitCreateUser() {
         setBtnLoading(true);
         await apiJSON('POST', API.addUser, body);
         msg.textContent = '新增成功';
-        await renderUsers();
+        await refreshUsersAndStay();
         closeUserModal();
     } catch (e) {
         const statusInfo = e && e.status ? ` (HTTP ${e.status})` : '';
@@ -388,7 +527,7 @@ async function submitCreateUser() {
 async function toggleEnable(userId, enabled) {
     try {
         await apiForm('PUT', API.enableUser, {userId, enabled});
-        await renderUsers();
+        await refreshUsersAndStay();
     } catch (e) {
         alert('更新狀態失敗：' + e.message);
     }
@@ -404,10 +543,15 @@ async function renderBooks() {
     <div class="card" style="margin-top:12px">  
       <table>  
         <thead><tr>  
-          <th>ID</th><th>封面</th><th>標題</th><th>作者</th><th>價格</th><th>狀態</th><th>操作</th>  
+          <th>ID</th><th>標題</th><th>作者</th><th>價格</th><th>狀態</th><th>操作</th>  
         </tr></thead>  
-        <tbody id="booksTbody"></tbody>  
+        <tbody id="booksTbody"><tr><td colspan="6" class="muted">載入中…</td></tr></tbody>  
       </table>  
+      <div class="inline" style="margin-top:8px">  
+        <button id="b_prev" class="btn small" disabled>上一頁</button>
+        <span id="b_page" class="muted"></span>  
+        <button id="b_next" class="btn small" disabled>下一頁</button>  
+      </div>  
     </div>  
     <div id="bookModal" class="card" style="display:none; margin-top:12px">  
       <h3 style="margin-top:0">新增 / 編輯書籍</h3>  
@@ -432,27 +576,72 @@ async function renderBooks() {
     const coverInput = document.getElementById('b_cover');
     if (coverInput) coverInput.addEventListener('input', updateCoverPreview);
     updateCoverPreview();
-    try {
-        const page = await apiGet(API.books + '?size=100');
-        const tbody = document.getElementById('booksTbody');
-        tbody.innerHTML = page.content.map(b => `<tr>  
-      <td>${b.id}</td>  
-      <td>${b.coverImageUrl ? `<img src="${b.coverImageUrl}" alt="cover" style="width:70px;height:100px;object-fit:cover;border-radius:4px;border:1px solid #30363d"/>` : ''}</td>  
-      <td>${b.title}</td>  
-      <td>${b.author}</td>  
-      <td>${b.listPrice}</td>  
-      <td>${b.status}</td>  
-      <td class="inline">  
-        <button class="btn small" onclick="editBook(${b.id})">編輯</button>  
-        <button class="btn small danger" onclick="deleteBook(${b.id})">刪除</button>  
-      </td>  
-    </tr>`).join('');
-    } catch (e) {
-        root.innerHTML += `<div class="muted">載入書籍失敗：${e.message}</div>`;
-    }
+    // 綁定分頁按鈕
+    const prev = document.getElementById('b_prev');
+    const next = document.getElementById('b_next');
+    if (prev) prev.onclick = () => changeBooksPage(-1);
+    if (next) next.onclick = () => changeBooksPage(1);
+    // 初次載入第一頁
+    await loadBooks(0);
 }
 
 let editingBookId = null;
+
+// 書籍列表前端分頁狀態
+var bookPage = { number: 0, totalPages: 0, size: 20 };
+
+// 載入書籍列表
+async function loadBooks(page) {
+    const tbody = document.getElementById('booksTbody');
+    const prevBtn = document.getElementById('b_prev');
+    const nextBtn = document.getElementById('b_next');
+    const pageTxt = document.getElementById('b_page');
+    if (!tbody) return;
+    const size = (bookPage && bookPage.size) || 20;
+    const p = Math.max(0, Number(page || 0));
+    const params = new URLSearchParams();
+    params.set('page', String(p));
+    params.set('size', String(size));
+    params.set('sort', 'createdAt,desc');
+    try {
+        const res = await apiGet(`${API.books}?${params.toString()}`);
+        const list = res && Array.isArray(res.content) ? res.content : [];
+        if (!list.length) {
+            tbody.innerHTML = `<tr><td colspan="6" class="muted">查無資料</td></tr>`;
+        } else {
+            tbody.innerHTML = list.map(b => `<tr>
+              <td>${b.id}</td>
+              <td><span class="ellipsis" title="${escHtml(b.title || '')}">${escHtml(b.title || '')}</span></td>
+              <td>${escHtml(b.author || '')}</td>
+              <td class="nowrap">${formatTWD(b.listPrice)}</td>
+              <td>${escHtml(b.status || '')}</td>
+              <td class="inline">
+                <button class="btn small" onclick="editBook(${b.id})">編輯</button>
+                <button class="btn small danger" onclick="deleteBook(${b.id})">刪除</button>
+              </td>
+            </tr>`).join('');
+        }
+        // 更新分頁狀態與控制
+        bookPage = {
+            number: (typeof res.number === 'number') ? res.number : p,
+            totalPages: (typeof res.totalPages === 'number') ? res.totalPages : Math.max(Math.ceil((res.totalElements || list.length) / size), 1),
+            size: (typeof res.size === 'number') ? res.size : size
+        };
+        if (pageTxt) pageTxt.textContent = `第 ${bookPage.number + 1} / ${Math.max(bookPage.totalPages || 1, 1)} 頁`;
+        if (prevBtn) prevBtn.disabled = bookPage.number <= 0;
+        if (nextBtn) nextBtn.disabled = bookPage.number >= (bookPage.totalPages - 1);
+    } catch (e) {
+        tbody.innerHTML = `<tr><td colspan="6" class="muted">載入失敗：${escHtml(e && e.message ? e.message : 'error')}</td></tr>`;
+        if (pageTxt) pageTxt.textContent = '';
+        if (prevBtn) prevBtn.disabled = true;
+        if (nextBtn) nextBtn.disabled = true;
+    }
+}
+
+function changeBooksPage(delta) {
+    const next = Math.max(0, Math.min((bookPage.number || 0) + delta, Math.max((bookPage.totalPages || 1) - 1, 0)));
+    loadBooks(next);
+}
 
 function openCreateBookModal() {
     editingBookId = null;
@@ -475,6 +664,7 @@ function clearBookForm() {
 }
 
 async function editBook(id) {
+    alert('下方已開啟編輯視窗');
     try {
         const b = await apiGet(API.books + '/' + id);
         editingBookId = id;
@@ -511,7 +701,9 @@ async function submitBook() {
             await apiJSON('POST', API.books, body);
         }
         document.getElementById('b_msg').textContent = '儲存成功';
-        await renderBooks();
+        // 重新載入當前頁
+        const current = (typeof bookPage !== 'undefined' && bookPage.number) ? bookPage.number : 0;
+        await loadBooks(current);
         closeBookModal();
     } catch (e) {
         document.getElementById('b_msg').textContent = '錯誤：' + e.message;
@@ -522,7 +714,9 @@ async function deleteBook(id) {
     if (!confirm('確定刪除？')) return;
     try {
         await fetch(withBase(API.books + '/' + id), {method: 'DELETE', headers: {...authHeader()}});
-        await renderBooks();
+        // 刪除後維持在同一頁，如該頁已無資料則由 loadBooks 處理頁碼邊界
+        const current = (typeof bookPage !== 'undefined' && bookPage.number) ? bookPage.number : 0;
+        await loadBooks(current);
     } catch (e) {
         alert('刪除失敗：' + e.message);
     }
@@ -599,10 +793,10 @@ async function renderPoints() {
   <div class="card" style="margin-top:16px">  
     <h3 style="margin-top:0">平台點數規則</h3>  
     <div class="form-grid">  
-        <div><label>回饋萬分比</label><input id="r_reward" type="number" min="0"></div>  
+        <div><label>回饋百分比</label><input id="r_reward" type="number" min="0"></div>  
         <div><label>每筆回饋上限</label><input id="r_max" type="number" min="0"></div>  
         <div><label>1點折抵金額</label><input id="r_rate" type="number" step="0.0001"></div>  
-        <div><label>最大折抵比例(萬分比)</label><input id="r_ratio" type="number" min="0"></div>  
+        <div><label>最大折抵比例(百分比)</label><input id="r_ratio" type="number" min="0"></div>  
         <div><label>到期策略</label>  
           <select id="r_policy"><option value="NONE">NONE</option><option value="FIXED_DATE">FIXED_DATE</option><option value="ROLLING_DAYS">ROLLING_DAYS</option></select>  
         </div>  
@@ -617,10 +811,10 @@ async function renderPoints() {
     try {
         const rule = await apiGet(API.pointsRule + '/current');
         if (rule) {
-            document.getElementById('r_reward').value = rule.rewardRateBp || 100;
+            document.getElementById('r_reward').value = rule.rewardRatePercent || 1;
             document.getElementById('r_max').value = rule.maxRewardPoints || '';
             document.getElementById('r_rate').value = (rule.redeemRate && rule.redeemRate) || 1;
-            document.getElementById('r_ratio').value = rule.maxRedeemRatioBp || '';
+            document.getElementById('r_ratio').value = rule.maxRedeemRatioPercent || '';
             document.getElementById('r_policy').value = rule.expiryPolicy || 'NONE';
             document.getElementById('r_days').value = rule.rollingDays || '';
             document.getElementById('r_fixed').value = rule.fixedExpireDay || '';
@@ -637,11 +831,11 @@ async function loadPointsUser() {
         document.getElementById('p_balance').textContent = `餘額：${bal.balance}`;
         const ledger = await apiGet(`${API.points}/${uid}/ledger?page=0&size=50`);
         document.getElementById('p_ledger').innerHTML = (ledger.content || []).map(i => `<tr>  
-      <td>${i.createdAt || ''}</td><td>${i.changeAmount}</td><td>${i.reason}</td><td>${i.balanceAfter}</td>  
+      <td>${escHtml(formatDateTime(i.createdAt))}</td><td>${i.changeAmount}</td><td>${escHtml(i.reason)}</td><td>${i.balanceAfter}</td>  
     </tr>`).join('');
         const lots = await apiGet(`${API.points}/${uid}/lots?page=0&size=50`);
         document.getElementById('p_lots').innerHTML = (lots.content || []).map(l => `<tr>  
-      <td>${l.id}</td><td>${l.earnedPoints}</td><td>${l.usedPoints}</td><td>${l.expiresAt || ''}</td>  
+      <td>${l.id}</td><td>${l.earnedPoints}</td><td>${l.usedPoints}</td><td>${escHtml(formatDateTime(l.expiresAt))}</td>  
     </tr>`).join('');
     } catch (e) {
         alert('載入點數資料失敗：' + e.message);
@@ -663,25 +857,22 @@ async function adjustPoints() {
 
 async function saveRule() {
     const body = {
-        rewardRateBp: parseInt(document.getElementById('r_reward').value || '100', 10),
+        rewardRatePercent: parseInt(document.getElementById('r_reward').value || '1', 10),
         maxRewardPoints: valOrNull(document.getElementById('r_max').value),
         redeemRate: document.getElementById('r_rate').value,
-        maxRedeemRatioBp: valOrNull(document.getElementById('r_ratio').value),
+        maxRedeemRatioPercent: valOrNull(document.getElementById('r_ratio').value),
         expiryPolicy: document.getElementById('r_policy').value,
         rollingDays: valOrNull(document.getElementById('r_days').value),
         fixedExpireDay: valOrNull(document.getElementById('r_fixed').value),
     };
     try {
-        const rule = await apiJSON('PUT', API.pointsRule, body);
+        await apiJSON('PUT', API.pointsRule, body);
         document.getElementById('r_msg').textContent = '已儲存';
     } catch (e) {
         document.getElementById('r_msg').textContent = '錯誤：' + e.message;
     }
 }
 
-function valOrNull(v) {
-    return (v === undefined || v === null || String(v).trim() === '') ? null : Number(v);
-}
 
 // 優惠券管理
 async function renderCoupons() {
@@ -689,7 +880,7 @@ async function renderCoupons() {
     if (!root) return;
     root.innerHTML = `  
   <div class="actions">  
-    <button class="btn" onclick="openCouponModal()">新增優惠券</button>  
+    <button class="btn" onclick="openCreateCouponModal()">新增優惠券</button>  
   </div>  
   <div class="card" style="margin-top:12px">  
     <table>  
@@ -702,11 +893,11 @@ async function renderCoupons() {
   <div id="couponModal" class="card" style="display:none;margin-top:12px">  
     <h3 style="margin-top:0">新增 / 編輯優惠券</h3>  
     <div class="form-grid">  
-      <div><label>名稱</label><input id="c_name" placeholder="如：春季滿額折扣"></div>  
+      <div><label>名稱</label><input id="c_name" placeholder="如春季滿額折扣"></div>  
       <div><label>代碼型態</label><select id="c_code_type"><option value="GENERIC">GENERIC</option></select><div class="muted" style="font-size:12px;margin-top:4px">目前僅支援通用代碼</div></div>  
       <div><label>通用代碼</label><input id="c_generic" placeholder="例：SPRING2025（GENERIC 時必填）"></div>  
       <div><label>折扣型態</label><select id="c_discount_type"><option value="FIXED">FIXED</option><option value="PERCENT">PERCENT</option></select></div>  
-      <div><label>折扣值</label><input id="c_value" type="number" placeholder="金額或百分比值，如 100 或 15"><div class="muted" style="font-size:12px;margin-top:4px">FIXED：折抵金額（元）；PERCENT：折抵百分比（0-100）</div></div>  
+      <div><label>折扣值</label><input id="c_value" type="number" placeholder="金額或百分比值，如 100 或 15"><div class="muted" style="font-size:12px;margin-top:4px">FIXED：折抵金額；PERCENT：折抵百分比（0-100）</div></div>  
       <div><label>最大折扣</label><input id="c_max" type="number" placeholder="選填，僅百分比時常用"><div class="muted" style="font-size:12px;margin-top:4px">可留空；限制單筆折抵上限</div></div>  
       <div><label>最低消費</label><input id="c_min" type="number" placeholder="選填，門檻金額"><div class="muted" style="font-size:12px;margin-top:4px">可留空；達到門檻才可用</div></div>  
       <div><label>開始時間</label><input id="c_start" type="datetime-local" title="必填：活動開始時間"><div class="muted" style="font-size:12px;margin-top:4px">必填</div></div>  
@@ -726,12 +917,12 @@ async function renderCoupons() {
         const tbody = document.getElementById('couponTbody');
         tbody.innerHTML = page.content.map(c => `<tr>  
       <td>${c.id}</td>  
-      <td>${c.name}</td>  
-      <td>${c.genericCode || ''}</td>  
-      <td>${c.codeType}</td>  
-      <td>${c.discountType} ${c.discountValue}</td>  
-      <td>${c.status}</td>  
-      <td>${c.startsAt || ''} ~ ${c.endsAt || ''}</td>  
+      <td>${escHtml(c.name)}</td>  
+      <td>${escHtml(c.genericCode || '')}</td>  
+      <td>${escHtml(c.codeType)}</td>  
+      <td>${escHtml(c.discountType)} ${c.discountValue}</td>  
+      <td>${escHtml(c.status)}</td>  
+      <td>${escHtml(formatDateTime(c.startsAt) || '')} ~ ${escHtml(formatDateTime(c.endsAt) || '')}</td>  
       <td class="inline">  
         <button class="btn small" onclick="editCoupon(${c.id})">編輯</button>  
         <button class="btn small danger" onclick="deleteCoupon(${c.id})">刪除</button>  
@@ -746,8 +937,13 @@ let editingCouponId = null;
 
 function openCouponModal() {
     document.getElementById('couponModal').style.display = 'block';
-    editingCouponId = null;
+    // 僅開啟與清表單，不重置 editingCouponId
     clearCouponForm();
+}
+
+function openCreateCouponModal() {
+    editingCouponId = null;
+    openCouponModal();
 }
 
 function closeCouponModal() {
@@ -763,12 +959,7 @@ function clearCouponForm() {
 
 async function editCoupon(id) {
     try {
-        const page = await apiGet(API.couponsAdmin + `?size=1&page=0&id=${id}`); // 若無單筆查詢，使用已載入資料
-        const item = (page.content || []).find(x => x.id === id) || null;
-        if (!item) {
-            alert('暫無讀取單筆API，請以列表資料為準');
-            return;
-        }
+        const item = await apiGet(API.couponsAdmin + '/' + id);
         editingCouponId = id;
         openCouponModal();
         document.getElementById('c_name').value = item.name || '';
@@ -788,12 +979,6 @@ async function editCoupon(id) {
     }
 }
 
-function toLocal(iso) {
-    if (!iso) return '';
-    const d = new Date(iso);
-    const pad = n => String(n).padStart(2, '0');
-    return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
-}
 
 async function submitCoupon() {
     const bodyBase = {
@@ -802,8 +987,8 @@ async function submitCoupon() {
         discountValue: parseInt(document.getElementById('c_value').value || '0', 10),
         maxDiscountAmount: valOrNull(document.getElementById('c_max').value),
         minSpendAmount: valOrNull(document.getElementById('c_min').value),
-        startsAt: new Date(document.getElementById('c_start').value).toISOString(),
-        endsAt: new Date(document.getElementById('c_end').value).toISOString(),
+        startsAt: fromInputDateTime('c_start'),
+        endsAt: fromInputDateTime('c_end'),
         status: document.getElementById('c_status').value,
         totalUsageLimit: valOrNull(document.getElementById('c_total').value),
         perUserLimit: valOrNull(document.getElementById('c_user').value),
@@ -861,7 +1046,7 @@ async function loadTickets() {
         const list = await apiGet(url);
         const tbody = document.getElementById('s_tbody');
         tbody.innerHTML = list.map(t => `<tr>  
-      <td>${t.id}</td><td>${t.subject}</td><td>${t.status}</td><td>${t.createdAt || ''}</td>  
+      <td>${t.id}</td><td>${escHtml(t.subject)}</td><td>${escHtml(t.status)}</td><td>${escHtml(formatDateTime(t.createdAt) || '')}</td>  
       <td><button class="btn small" onclick="openTicket(${t.id})">檢視</button></td>  
     </tr>`).join('');
     } catch (e) {
@@ -875,10 +1060,10 @@ async function openTicket(id) {
         const box = document.getElementById('s_detail');
         box.style.display = 'block';
         box.innerHTML = `  
-      <h3 style="margin-top:0">工單 #${d.id} - ${d.subject}</h3>  
-      <div class="muted">${d.contactName} (${d.contactEmail}) · 狀態：${d.status}</div>  
+      <h3 style="margin-top:0">工單 #${d.id} - ${escHtml(d.subject)}</h3>  
+      <div class="muted">${escHtml(d.contactName)} (${escHtml(d.contactEmail)}) · 狀態：${escHtml(d.status)}</div>  
       <div style="margin-top:8px">  
-        ${(d.messages || []).map(m => `<div style="padding:8px;border-bottom:1px solid #30363d"><b>${m.sender}</b> <span class="muted">${m.createdAt || ''}</span><div>${m.content}</div></div>`).join('')}  
+        ${(d.messages || []).map(m => `<div style="padding:8px;border-bottom:1px solid #30363d"><b>${escHtml(m.sender)}</b> <span class="muted">${escHtml(formatDateTime(m.createdAt) || '')}</span><div>${escHtml(m.content)}</div></div>`).join('')}  
       </div>  
       <div class="inline" style="margin-top:8px">  
         <input id="s_reply" placeholder="回覆內容">  
@@ -909,14 +1094,188 @@ function renderOrders() {
     if (!root) return;
     root.innerHTML = `  
     <div class="card">  
-      <h3 style="margin-top:0">訂單管理（待串接API）</h3>  
-      <table>        <thead><tr>  
-          <th>ID</th><th>訂單編號</th><th>用戶ID</th><th>總金額</th><th>折扣</th><th>應付</th><th>狀態</th><th>付款</th><th>建立時間</th>  
+      <h3 style="margin-top:0">訂單管理</h3>  
+      <div class="inline" style="margin-bottom:8px; gap:8px; flex-wrap:wrap">  
+        <input id="o_orderNo" placeholder="訂單編號">  
+        <input id="o_userId" type="number" placeholder="用戶ID">  
+        <select id="o_status">  
+          <option value="">全部狀態</option>  
+          <option value="CREATED">CREATED</option>  
+          <option value="PAYING">PAYING</option>  
+          <option value="PAID">PAID</option>  
+          <option value="FAILED">FAILED</option>  
+          <option value="FULFILLED">FULFILLED</option>  
+        </select>  
+        <input id="o_from" type="date" placeholder="起">  
+        <input id="o_to" type="date" placeholder="迄">  
+        <select id="o_sort">  
+          <option value="createdAt,desc">建立時間(新→舊)</option>  
+          <option value="createdAt,asc">建立時間(舊→新)</option>  
+          <option value="payableAmount,desc">應付金額(高→低)</option>  
+          <option value="payableAmount,asc">應付金額(低→高)</option>  
+        </select>  
+        <button class="btn" onclick="applyOrderFilters()">查詢</button>  
+        <button class="btn secondary" onclick="resetOrderFilters()">重置</button>  
+      </div>  
+      <table>  
+        <thead><tr>  
+          <th>ID</th><th>訂單編號</th><th>用戶ID</th><th>總金額</th><th>折扣</th><th>點數折抵</th><th>應付</th><th>狀態</th><th>付款方式</th><th>建立時間</th><th>操作</th>  
         </tr></thead>  
-        <tbody>          <tr><td colspan="9" class="muted">尚未提供API，待後續串接</td></tr>  
-        </tbody>  
+        <tbody id="ordersTbody"><tr><td colspan="11" class="muted">載入中…</td></tr></tbody>  
       </table>  
-    </div>`;
+      <div class="inline" style="margin-top:8px">  
+        <button id="o_prev" class="btn small" disabled>上一頁</button>  
+        <span id="o_page" class="muted"></span>  
+        <button id="o_next" class="btn small" disabled>下一頁</button>  
+      </div>  
+    </div>  
+
+    <div id="orderDetail" class="card" style="display:none; margin-top:12px"></div>`;
+
+    // 綁定分頁
+    document.getElementById('o_prev').onclick = () => changeOrdersPage(-1);
+    document.getElementById('o_next').onclick = () => changeOrdersPage(1);
+
+    // 初次載入
+    loadOrders(0);
+}
+
+let orderPage = {number: 0, totalPages: 0};
+
+function getOrderFilters() {
+    const orderNo = (document.getElementById('o_orderNo')?.value || '').trim();
+    const userId = (document.getElementById('o_userId')?.value || '').trim();
+    const status = (document.getElementById('o_status')?.value || '').trim();
+    const dateFrom = (document.getElementById('o_from')?.value || '').trim();
+    const dateTo = (document.getElementById('o_to')?.value || '').trim();
+    const sort = (document.getElementById('o_sort')?.value || 'createdAt,desc');
+    return {orderNo, userId, status, dateFrom, dateTo, sort};
+}
+
+async function loadOrders(page) {
+    const tbody = document.getElementById('ordersTbody');
+    if (!tbody) return;
+    const {orderNo, userId, status, dateFrom, dateTo, sort} = getOrderFilters();
+    const params = new URLSearchParams();
+    params.set('page', String(page || 0));
+    params.set('size', '20');
+    params.set('sort', sort);
+    if (orderNo) params.set('orderNo', orderNo);
+    if (userId) params.set('userId', userId);
+    if (status) params.set('status', status);
+    if (dateFrom) params.set('dateFrom', dateFrom);
+    if (dateTo) params.set('dateTo', dateTo);
+
+    try {
+        const res = await apiGet(`${API.ordersAdmin}?${params.toString()}`);
+        const list = res.content || [];
+        if (!list.length) {
+            tbody.innerHTML = `<tr><td colspan="11" class="muted">查無資料</td></tr>`;
+        } else {
+            tbody.innerHTML = list.map(o => `<tr>
+              <td>${o.id}</td>
+              <td>${escHtml(o.orderNo)}</td>
+              <td>${o.userId}</td>
+              <td class="nowrap">${formatTWD(o.totalAmount)}</td>
+              <td class="nowrap">${formatTWD(o.discountAmount)}</td>
+              <td class="nowrap">${formatTWD(o.pointsDeductionAmount)}</td>
+              <td class="nowrap"><b>${formatTWD(o.payableAmount)}</b></td>
+              <td>${escHtml(o.status || '')}</td>
+              <td>${escHtml(o.paymentType || '')}</td>
+              <td class="nowrap">${escHtml(formatDateTime(o.createdAt) || '')}</td>
+              <td class="inline">
+                <button class="btn small" onclick="openOrder(${o.id})">查看</button>
+              </td>
+            </tr>`).join('');
+        }
+        orderPage = {number: res.number, totalPages: res.totalPages};
+        const pageText = `第 ${res.number + 1} / ${Math.max(res.totalPages || 1, 1)} 頁`;
+        const elPage = document.getElementById('o_page'); if (elPage) elPage.textContent = pageText;
+        const prev = document.getElementById('o_prev'); if (prev) prev.disabled = res.number <= 0;
+        const next = document.getElementById('o_next'); if (next) next.disabled = res.number >= (res.totalPages - 1);
+    } catch (e) {
+        tbody.innerHTML = `<tr><td colspan="11" class="muted">載入失敗：${escHtml(e.message || 'error')}</td></tr>`;
+    }
+}
+
+function changeOrdersPage(delta) {
+    const next = Math.max(0, Math.min((orderPage.number || 0) + delta, Math.max((orderPage.totalPages || 1) - 1, 0)));
+    loadOrders(next);
+}
+
+function applyOrderFilters() { loadOrders(0); }
+function resetOrderFilters() {
+    ['o_orderNo','o_userId','o_status','o_from','o_to','o_sort'].forEach(id => { const el = document.getElementById(id); if (el) el.value = el.tagName === 'SELECT' ? (id==='o_sort'?'createdAt,desc':'') : ''; });
+    loadOrders(0);
+}
+
+async function openOrder(id) {
+    const panel = document.getElementById('orderDetail');
+    if (!panel) return;
+    panel.style.display = 'block';
+    panel.innerHTML = '<div class="muted">載入中…</div>';
+    try {
+        const d = await apiGet(`${API.ordersAdmin}/${id}`);
+        const itemsHtml = (d.items || []).map(it => `<tr>
+            <td>${it.id}</td>
+            <td>${it.bookId ?? ''}</td>
+            <td><span class="ellipsis" title="${escHtml(it.name || '')}">${escHtml(it.name || '')}</span></td>
+            <td class="nowrap">${formatTWD(it.price)}</td>
+        </tr>`).join('') || `<tr><td colspan="4" class="muted">無明細</td></tr>`;
+        panel.innerHTML = `
+          <h3 style="margin-top:0">訂單明細 #${d.id}</h3>
+          <div class="grid cols-3" style="gap:8px">
+            <div><div class="muted">訂單編號</div><div>${escHtml(d.orderNo)}</div></div>
+            <div><div class="muted">用戶ID</div><div>${d.userId}</div></div>
+            <div><div class="muted">建立時間</div><div>${escHtml(formatDateTime(d.createdAt) || '')}</div></div>
+            <div><div class="muted">總金額</div><div>${formatTWD(d.totalAmount)}</div></div>
+            <div><div class="muted">折扣</div><div>${formatTWD(d.discountAmount)}</div></div>
+            <div><div class="muted">點數折抵</div><div>${formatTWD(d.pointsDeductionAmount)}</div></div>
+            <div><div class="muted">應付</div><div><b>${formatTWD(d.payableAmount)}</b></div></div>
+            <div><div class="muted">狀態</div><div>${escHtml(d.status || '')}</div></div>
+            <div><div class="muted">付款方式</div><div>${escHtml(d.paymentType || '')}</div></div>
+          </div>
+          <div class="inline" style="margin:8px 0; gap:8px">
+            <select id="od_status">
+              <option value="">不變更</option>
+              <option value="CREATED">CREATED</option>
+              <option value="PAYING">PAYING</option>
+              <option value="PAID">PAID</option>
+              <option value="FAILED">FAILED</option>
+              <option value="FULFILLED">FULFILLED</option>
+            </select>
+            <input id="od_paytype" placeholder="付款方式 (可空)" value="${escHtml(d.paymentType || '')}">
+            <button class="btn" onclick="submitUpdateOrder(${d.id})">更新狀態/付款</button>
+            <button class="btn secondary" onclick="(function(){const p=document.getElementById('orderDetail'); if(p) p.style.display='none';})()">關閉</button>
+            <span id="od_msg" class="muted"></span>
+          </div>
+          <div class="muted" style="margin:8px 0 4px">商品明細</div>
+          <table>
+            <thead><tr><th>明細ID</th><th>書籍ID</th><th>名稱</th><th>價格</th></tr></thead>
+            <tbody>${itemsHtml}</tbody>
+          </table>
+        `;
+        const sel = document.getElementById('od_status');
+        if (sel && d.status) sel.value = '';
+    } catch (e) {
+        panel.innerHTML = `<div class="muted">讀取失敗：${escHtml(e.message || 'error')}</div>`;
+    }
+}
+
+async function submitUpdateOrder(id) {
+    const status = (document.getElementById('od_status')?.value || '').trim();
+    const paymentType = (document.getElementById('od_paytype')?.value || '').trim();
+    const msg = document.getElementById('od_msg');
+    try {
+        await apiJSON('PUT', `${API.ordersAdmin}/${id}/status`, {status: status || null, paymentType: paymentType || null});
+        msg.textContent = '更新成功';
+        // 重新載入列表與明細
+        const current = orderPage.number || 0;
+        await loadOrders(current);
+        await openOrder(id);
+    } catch (e) {
+        if (msg) msg.textContent = '更新失敗：' + (e.message || 'error');
+    }
 }
 
 // 管理操作記錄
@@ -980,7 +1339,7 @@ async function loadAdminLogs(page) {
         tbody.innerHTML = content.map(x => {
             const target = `${escHtml(x.targetType || '')}#${escHtml(x.targetId || '')}`;
             const details = escHtml(x.details || '');
-            const time = escHtml(x.createdAt || '');
+            const time = escHtml(formatDateTime(x.createdAt) || '');
             return `<tr>  
       <td>${x.id}</td>  
       <td>${x.adminId}</td>  

@@ -86,6 +86,12 @@ public class CouponService {
         return toResponse(couponRepository.save(c));
     }
 
+    // 新增：單筆查詢
+    public CouponDtos.CouponResponse getById(Long id) {
+        Coupon c = couponRepository.findById(id).orElseThrow(() -> new EntityNotFoundException("coupon 不存在"));
+        return toResponse(c);
+    }
+
     // Public
     public CouponDtos.ValidateResponse validate(String code, Long userId, int orderAmount) {
         Optional<Coupon> opt = couponRepository.findByGenericCodeIgnoreCase(code);
@@ -133,11 +139,13 @@ public class CouponService {
         if (!vr.isValid()) {
             throw new IllegalArgumentException("不可用: " + vr.getReason());
         }
-        Coupon c = couponRepository.findById(vr.getCouponId())
+
+        // 取出 Coupon 實體（也可用 getReferenceById(vr.getCouponId())）
+        Coupon coupon = couponRepository.findById(vr.getCouponId())
                 .orElseThrow(() -> new EntityNotFoundException("coupon 不存在"));
 
         CouponRedemption red = CouponRedemption.builder()
-                .coupon(c)
+                .coupon(coupon) // 修正：傳入關聯實體，而非 couponId
                 .userId(req.getUserId())
                 .orderId(req.getOrderId())
                 .orderItemId(req.getOrderItemId())
@@ -147,13 +155,13 @@ public class CouponService {
                 .build();
         try {
             red = redemptionRepository.save(red);
-        } catch (DataIntegrityViolationException e) {
-            // 可能重複核銷同一張訂單
+        } catch (org.springframework.dao.DataIntegrityViolationException e) {
             throw new IllegalStateException("該訂單已使用此券");
         }
+
         return CouponDtos.RedemptionResponse.builder()
                 .redemptionId(red.getId())
-                .couponId(red.getCoupon().getId())
+                .couponId(red.getCoupon().getId()) // 修正：使用關聯取得 ID
                 .userId(red.getUserId())
                 .orderId(red.getOrderId())
                 .amountDiscounted(red.getAmountDiscounted())
@@ -162,6 +170,7 @@ public class CouponService {
                 .build();
     }
 
+
     @Transactional
     public CouponDtos.RedemptionResponse reverse(Long redemptionId, String note) {
         CouponRedemption red = redemptionRepository.findById(redemptionId)
@@ -169,9 +178,10 @@ public class CouponService {
         red.setStatus(CouponRedemption.RedemptionStatus.REVERSED);
         red.setNote(note);
         red = redemptionRepository.save(red);
+
         return CouponDtos.RedemptionResponse.builder()
                 .redemptionId(red.getId())
-                .couponId(red.getCoupon().getId())
+                .couponId(red.getCoupon().getId()) // 修正
                 .userId(red.getUserId())
                 .orderId(red.getOrderId())
                 .amountDiscounted(red.getAmountDiscounted())
@@ -184,7 +194,7 @@ public class CouponService {
         return redemptionRepository.findAllByUserIdOrderByRedeemedAtDesc(userId, pageable)
                 .map(r -> CouponDtos.RedemptionResponse.builder()
                         .redemptionId(r.getId())
-                        .couponId(r.getCoupon().getId())
+                        .couponId(r.getCoupon().getId()) // 修正
                         .userId(r.getUserId())
                         .orderId(r.getOrderId())
                         .amountDiscounted(r.getAmountDiscounted())

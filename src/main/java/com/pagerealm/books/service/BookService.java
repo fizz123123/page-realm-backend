@@ -28,7 +28,7 @@ public class BookService {
     }
 
     public Page<Book> list(Pageable pageable) {
-        return bookRepository.findAll(pageable);
+        return bookRepository.findAllByOrderByIdAsc(pageable);
     }
 
     public Book get(Long id) {

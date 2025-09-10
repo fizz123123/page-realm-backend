@@ -17,7 +17,7 @@ public class PointRule {
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long id;
 
-    // 回饋比率（萬分比），100=1%
+    // 內部儲存：回饋比率（萬分比，100=1%）
     @Column(name = "reward_rate_bp", nullable = false)
     private Integer rewardRateBp;
 
@@ -29,7 +29,7 @@ public class PointRule {
     @Column(name = "redeem_rate", nullable = false, precision = 10, scale = 4)
     private java.math.BigDecimal redeemRate;
 
-    // 折抵上限（占應付金額%），例 5000=50%
+    // 內部儲存：折抵上限（萬分比，例 5000=50%）
     @Column(name = "max_redeem_ratio_bp")
     private Integer maxRedeemRatioBp;
 
@@ -46,5 +46,37 @@ public class PointRule {
     private Integer fixedExpireDay;
 
     public enum ExpiryPolicy { NONE, FIXED_DATE, ROLLING_DAYS }
-}
 
+    // ===== 以下為對外API用的百分比欄位（不入庫），與 bp 欄位互轉 =====
+    @Transient
+    private Integer rewardRatePercent; // 例如 1 表示 1%
+
+    @Transient
+    private Integer maxRedeemRatioPercent; // 例如 50 表示 50%
+
+    public Integer getRewardRatePercent() {
+        if (rewardRatePercent != null) return rewardRatePercent;
+        if (rewardRateBp == null) return null;
+        return rewardRateBp / 100; // 100 bp = 1%
+    }
+
+    public void setRewardRatePercent(Integer rewardRatePercent) {
+        this.rewardRatePercent = rewardRatePercent;
+        if (rewardRatePercent != null) {
+            this.rewardRateBp = rewardRatePercent * 100; // 1% = 100 bp
+        }
+    }
+
+    public Integer getMaxRedeemRatioPercent() {
+        if (maxRedeemRatioPercent != null) return maxRedeemRatioPercent;
+        if (maxRedeemRatioBp == null) return null;
+        return maxRedeemRatioBp / 100; // 100 bp = 1%
+    }
+
+    public void setMaxRedeemRatioPercent(Integer maxRedeemRatioPercent) {
+        this.maxRedeemRatioPercent = maxRedeemRatioPercent;
+        if (maxRedeemRatioPercent != null) {
+            this.maxRedeemRatioBp = maxRedeemRatioPercent * 100; // 1% = 100 bp
+        }
+    }
+}
