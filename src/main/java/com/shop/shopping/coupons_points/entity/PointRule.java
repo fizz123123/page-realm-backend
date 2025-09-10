@@ -1,0 +1,82 @@
+package com.shop.shopping.coupons_points.entity;
+
+import jakarta.persistence.*;
+import lombok.AllArgsConstructor;
+import lombok.Builder;
+import lombok.Data;
+import lombok.NoArgsConstructor;
+
+@Entity
+@Table(name = "point_rules")
+@Data
+@Builder
+@NoArgsConstructor
+@AllArgsConstructor
+public class PointRule {
+    @Id
+    @GeneratedValue(strategy = GenerationType.IDENTITY)
+    private Long id;
+
+    // 內部儲存：回饋比率（萬分比，100=1%）
+    @Column(name = "reward_rate_bp", nullable = false)
+    private Integer rewardRateBp;
+
+    // 每筆回饋上限
+    @Column(name = "max_reward_points")
+    private Integer maxRewardPoints;
+
+    // 1點=多少貨幣單位
+    @Column(name = "redeem_rate", nullable = false, precision = 10, scale = 4)
+    private java.math.BigDecimal redeemRate;
+
+    // 內部儲存：折抵上限（萬分比，例 5000=50%）
+    @Column(name = "max_redeem_ratio_bp")
+    private Integer maxRedeemRatioBp;
+
+    @Enumerated(EnumType.STRING)
+    @Column(name = "expiry_policy", nullable = false, length = 20)
+    private ExpiryPolicy expiryPolicy;
+
+    // 例：180 表示獲點後 180 天到期
+    @Column(name = "rolling_days")
+    private Integer rollingDays;
+
+    // 例：每年 1231 (12/31)，由排程計算到期日
+    @Column(name = "fixed_expire_day")
+    private Integer fixedExpireDay;
+
+    public enum ExpiryPolicy { NONE, FIXED_DATE, ROLLING_DAYS }
+
+    // ===== 以下為對外API用的百分比欄位（不入庫），與 bp 欄位互轉 =====
+    @Transient
+    private Integer rewardRatePercent; // 例如 1 表示 1%
+
+    @Transient
+    private Integer maxRedeemRatioPercent; // 例如 50 表示 50%
+
+    public Integer getRewardRatePercent() {
+        if (rewardRatePercent != null) return rewardRatePercent;
+        if (rewardRateBp == null) return null;
+        return rewardRateBp / 100; // 100 bp = 1%
+    }
+
+    public void setRewardRatePercent(Integer rewardRatePercent) {
+        this.rewardRatePercent = rewardRatePercent;
+        if (rewardRatePercent != null) {
+            this.rewardRateBp = rewardRatePercent * 100; // 1% = 100 bp
+        }
+    }
+
+    public Integer getMaxRedeemRatioPercent() {
+        if (maxRedeemRatioPercent != null) return maxRedeemRatioPercent;
+        if (maxRedeemRatioBp == null) return null;
+        return maxRedeemRatioBp / 100; // 100 bp = 1%
+    }
+
+    public void setMaxRedeemRatioPercent(Integer maxRedeemRatioPercent) {
+        this.maxRedeemRatioPercent = maxRedeemRatioPercent;
+        if (maxRedeemRatioPercent != null) {
+            this.maxRedeemRatioBp = maxRedeemRatioPercent * 100; // 1% = 100 bp
+        }
+    }
+}
